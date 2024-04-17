@@ -28,3 +28,6 @@ https://dashboard.render.com/worker/srv-cof7m0ocmk4c7382bln0/logs
 https://check-host.net/
 https://check-host.net/?=
 https://check-host.net/check-http?host=https%3A%2F%2Fwww.guaruja.sp.gov.br%2F&csrf_token=c7166c25f7e13b603412c736e568aff3c16c92e3
+https://blogs.nasa.gov/commercialcrew/
+https://science.nasa.gov/get-involved/citizen-science/nasa-volunteers-find-fifteen-rare-active-asteroids/
+https://www.nasa.gov/directorates/stmd/nasa-refines-national-space-technology-development-priorities/
